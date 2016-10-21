@@ -37,41 +37,42 @@ section block
 known section ids
 -------------------------
 0x00000000    no section (terminates section header list)
-0x00012000    parameter section (eg. times, energy calibration, number of channels)
-0x00012001    string section
-0x00012002    efficiency section
-0x00012003    sample? section
-0x00012004    marker section
+0x00012000    acquisition parameter section (eg. times, energy calibration, number of channels)
+0x00012001    sample parameter section
+0x00012002    geometry parameter section
+0x00012003    QA Results or Processing parameter section
+0x00012004    display parameter section
 0x00012005    channel data section
-0x00012006    GammaML X2.1 section?
-0x00012010    analytics section
-0x00012013    gamma encal section?
-0x0001200D    gamma encal section?
+0x00012010    analysis control parameter section (This section describes the contents of Analysis Sequence Files)
 0x0001202C    nuclid identification section
+
 
 
 observed but unknown section ids
 --------------------------------
+0x00012006    GammaML X2.1 section?
+0x00012013    gamma encal section?
+0x0001200D    gamma encal section?
 0x00012016
 0x00004006     (Note: no header in section block!)
 
 
 
-parameter section
------------------
+Acquisition parameter section [0x00]
+------------------------------------
 (offsets from beginning of section header)
-([0x00] is uint16 format offset)
 
 0x30 + 0x00    string[32]   file description
-0x30 + 0x80    string[4]    measurement mode
+0x30 + 0x80    string[4]    acquisition mode
+
 0x30 + 0x8A    uint8        number of channels / 256
 0x30 + 0xA0    uint32       number (differs for every measurement)
 
-0x30 + 0xFB    string[8]    energy calibration type
+0x30 + 0xFB    string[8]    energy calibration type (ecaltype)
 
-0x30 + [0x24] + 0x01    datetime     start datetime
-0x30 + [0x24] + 0x09    time         real time
-0x30 + [0x24] + 0x11    time         live time
+0x30 + [0x24] + 0x01    uint64         start datetime
+0x30 + [0x24] + 0x09    uint64         real time
+0x30 + [0x24] + 0x11    uint64         live time
 
 0x30 + [0x22] + 0x44    pdp11_float    A[0] energy calibration coefficients
 0x30 + [0x22] + 0x48    pdp11_float    A[1]
@@ -86,59 +87,48 @@ parameter section
 0x30 + [0x22] + 0xE4    pdp11_float    B[2]
 0x30 + [0x22] + 0xE8    pdp11_float    B[3]
 
-0x30 + [0x22] + 0x108   string         data source
-0x30 + [0x22] + 0x30C   string[8]      detector type
+0x30 + [0x22] + 0x108   string		data source
+0x30 + [0x22] + 0x30C   string[8]	detector type
 
 
 
-efficiency section
-------------------
+sample paarmeter section [0x01]
+-------------------------------
 (offsets from beginning of section header)
 
-0x30 + 0x2A  string[16]   geometry ID
-0x30 + 0xCE  string[32]   efficiency type
-0x30 + 0x19F string[16]   calibration name?
+0x30 + 0x00     string[64]      sample name
+0x30 + 0x40     string[16]      sample id 
+0x30 + 0x80     string[16]      sample type
+0x30 + 0x94     string[10]      sample unit
+0x30 + 0xa4 	string[10]      sample geometry
+0x30 + 0x2a6	string[24]      user name
+0x30 + 0x2dbe	string[24]      operator name
+0x30 + 0x32e	string[100]     sample description
 
 
-sample section
---------------
+
+geometry parameter section [0x02]
+---------------------------------
 (offsets from beginning of section header)
 
-0x30 + 0x00    string[16]   deposition unit
-                            deposition time
-0x30 + 0x88    string[8]     LINEAR, STEP?
-0x30 + 0x140   string[8]    sample preparation
+0x30 + 0x2A    string[16]   	geometry ID
+0x30 + 0xCE    string[32]   	efficiency type
+0x30 + 0x19F   string[16]  	calibration name?
 
 
-
-calibration section
--------------------
+QA results section or processing parameter section [0x03]
+---------------------------------------------------------
 (offsets from beginning of section header)
 
-0x30 + 0x00 string[16]  calibration name?
+0x30 + 0x00    string[16]  	deposition unit
+                          	deposition time
+0x30 + 0x88    string[8]   	LINEAR, STEP?
+0x30 + 0x140   string[8]    	sample preparation
 
 
 
-analytics section
--------------------
-(offsets from beginning of section header)
-
-0x30 + 0x12 string[40]  description of analytics sequence
-
-analytics data:
-0x30 + 0x76 string[192]  background file
-0x30 + 0x3E6 string[96]  nuclide identification file (NID)
-0x30 + 0x4A6 string[96]  dsc info file
-0x30 + 0x62E string[16]  data source info
-0x30 + 0x18EB string[192]  nid file?
-0x30 + 0x273D string[128]  ??
-..
-0x30 + 0x33DA string[64]  report ctl file
-
-
-
-marker section
---------------
+display parameter section [0x04]
+--------------------------------
 (offsets from beginning of section header)
 
 0x30 + 0x4A     uint32      marker left
@@ -146,10 +136,28 @@ marker section
 	
 	
 	
-channel data section
---------------------
+channel data section [0x05]
+---------------------------
 
 0x30 + 0x1D0    uint32[n_channels]      channel count data (see parameter section for n_channels)
+
+
+
+analysis control parameter section [0x10]
+------------------------------------------
+(offsets from beginning of section header)
+
+0x30 + 0x12 string[40]  	description of analysis sequence
+
+analysis parameter:
+0x30 + 0x76 	string[192]  	background file
+0x30 + 0x3E6 	string[96]  	nuclide identification file (NID)
+0x30 + 0x4A6 	string[96]  	dsc info file
+0x30 + 0x62E 	string[16]  	data source info
+0x30 + 0x18EB 	string[192]  	nid file?
+0x30 + 0x273D 	string[128]  	??
+..
+0x30 + 0x33DA 	string[64]  	report ctl file
 
 
 
@@ -174,8 +182,9 @@ and subtract 3506716800UL.
 
 
 
-general information:
---------------------
+general content of status window:
+---------------------------------
+
 Marker Info Status
 
 This status page includes data related to the current marker positions such as start/end channel and energy, centroid channel and energy, FWHM and FWTM, integral, area, etc.
@@ -191,10 +200,6 @@ This status page includes sample-related information such as ID, description, sa
 Calibration Info Status
 
 This status page shows the current energy, FWHM, and tail calibration equations. It also shows the efficiency calculated at (the energy of) the current cursor position.
-
-Display Info Status
-
-This status page includes data related to the current display window and the current ROI (defined by the current marker positions). This includes information such as start and end channels and VFS of the display window/spectrum, and the width, net cps, and total cps of the current ROI. The data is for the expand window if expand is on; it is for the compare spectrum if compare is on and the compare spectrum is currently selected.
 
 Display Info Status
 
