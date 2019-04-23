@@ -4,6 +4,10 @@
 
  Stephan Messlinger
  2016-10-10
+
+ edit by Marek Blaszczynski
+ 2016-10-13
+
 */
 
 #include <string.h>
@@ -138,11 +142,12 @@ int main( int argc, char* argv[] )
 	size_t data_len=0;
 	FILE *cnf=NULL, *txt=NULL;
 	size_t offs_param=0, offs_str=0, offs_chan=0, offs_mark=0;
-	size_t offs_calib=0, offs_times=0; 
+	size_t offs_calib=0, offs_times=0;
 	const char *sample_name=NULL, *sample_id=NULL, *sample_type=NULL,
-		        *sample_unit=NULL, *user_name=NULL, *sample_desc=NULL,
-		        *energy_unit=NULL;
-	double A[4]={0}, real_time=0, live_time=0;
+		        *sample_unit=NULL, *sample_geom=NULL, *user_name=NULL,
+		        *sample_desc=NULL, *operator_name=NULL, *energy_unit=NULL,
+		        *filedescr=NULL, *meas_mode=NULL, *ecaltype=NULL;
+	double A[4]={0}, B[4]={0}, real_time=0, live_time=0, dead_time=0;
 	time_t  start_time=0;
 	char start_time_str[40]="";
 	int n_channels=0;
@@ -181,7 +186,7 @@ int main( int argc, char* argv[] )
 	data_len = fread_all(&data, cnf);
 	if (!data_len) {
 		int err = errno;
-		printf("Error reading from file %s:\n", filename, strerror(err) );
+		printf("Error reading from file %s (VDM running?): %s\n", filename, strerror(err) );
 		exit(1);
 	}
 
@@ -203,7 +208,7 @@ int main( int argc, char* argv[] )
 		if (idh==0x00000000)  break;           /* end of section list */
 
 		offs = uint32_at(data + oh + 0x0a);    /* Start of section in data file */
-		
+
 		if      (idh==0x00012000)  offs_param = offs;  /* Known section ids */
 		else if (idh==0x00012001)  offs_str = offs;
 		else if (idh==0x00012005)  offs_chan = offs;
@@ -221,36 +226,48 @@ int main( int argc, char* argv[] )
 		exit(1);
 	}
 
-	/* Strings */
+	/* Sample parameters (strings) */
 	if (offs_str + 0x0470 > data_len ) {
 		printf("File %s: Format error.\n", filename );
 		exit(1);
 	}
-	sample_name = data + offs_str + 0x0030; /* max 0x40 */
-	sample_id = data + offs_str + 0x0070;    /* max 0x40 */
-	sample_type = data + offs_str + 0x00b0;  /* max 0x10 */
-	sample_unit = data + offs_str + 0x00c4; /* max 0x40 */
-	user_name = data + offs_str + 0x02d6;   /* max 0x18 */
-	sample_desc = data + offs_str + 0x036e; /* max 0x100 */
+	sample_name = data + offs_str + 0x30+ 0x00; /* max 64 */
+	sample_id = data + offs_str + 0x30 + 0x40;    /* max 16 */
+	sample_type = data + offs_str + 0x30 + 0x80;  /* max 16 */
+	sample_unit = data + offs_str + 0x30 + 0x94; /* max 10 */
+	sample_geom = data + offs_str + 0x30 + 0xa4; /* max 10 */
+	user_name = data + offs_str + 0x30 + 0x2a6;   /* max 24 */
+	operator_name = data + offs_str + 0x30 + 0x2dbe; /* max 24 */
+	sample_desc = data + offs_str + 0x30 + 0x32e; /* max 100 */
+
 
 	if (offs_param + 0x0452 > data_len ) {
 		printf("File %s: Format error.\n", filename );
 		exit(1);
 	}
-	/* Energy calibration coefficients */
 	offs_calib = offs_param + 0x30 + uint16_at(data + offs_param + 0x22);
+	/* general information */
+	filedescr = data + offs_param + 0x30 + 0x00; /* max 32 */
+	meas_mode = data + offs_param + 0x30 + 0x80; /* max 4 */
+	ecaltype = data + offs_param + 0x30 + 0xfb; /* max 8 */
+	/* Energy calibration coefficients */
 	A[0] = pdp11f_at(data + offs_calib + 0x44);
 	A[1] = pdp11f_at(data + offs_calib + 0x48);
 	A[2] = pdp11f_at(data + offs_calib + 0x4c);
 	A[3] = pdp11f_at(data + offs_calib + 0x50);
 	energy_unit = trim_str( data + offs_calib + 0x5c );
-
+    /* FWHM calibration coefficients */
+	B[0] = pdp11f_at(data + offs_calib + 0xdc);
+	B[1] = pdp11f_at(data + offs_calib + 0xe0);
+	B[2] = pdp11f_at(data + offs_calib + 0xe4);
+	B[3] = pdp11f_at(data + offs_calib + 0xe8);
 	/* Times */
 	offs_times = offs_param + 0x30 + uint16_at(data + offs_param + 0x24);
 	real_time = time_at( data + offs_times + 0x09 );
 	live_time = time_at( data + offs_times + 0x11 );
 	start_time = datetime_at( data + offs_times + 0x01 );
 	strftime( start_time_str, sizeof(start_time_str), "%Y-%m-%d, %H:%M:%S", gmtime(&start_time) );
+	dead_time = (real_time-live_time)/live_time*100;
 
 	/* Channel data */
 	n_channels = uint8_at( data + offs_param + 0x00ba ) * 256;
@@ -280,10 +297,12 @@ int main( int argc, char* argv[] )
 		printf("Error opening file %s.\n", ofname );
 		exit(1);
 	}
-
+    /* To add here:
+       channels, Measurement Mode, MCA type, sample_unit[16], operator_name[24]
+	*/
 	fprintf( txt, "#\n" );
 	fprintf( txt, "# Sample name: %.64s\n", sample_name );
-	fprintf( txt, "# Sample id:   %.64s\n", sample_id );
+	fprintf( txt, "# Sample id:   %.16s\n", sample_id );
 	fprintf( txt, "# Sample type: %.16s\n", sample_type );
 	fprintf( txt, "# User name:   %.24s\n", user_name );
 	fprintf( txt, "# Sample description: %.256s\n", sample_desc );
@@ -291,6 +310,7 @@ int main( int argc, char* argv[] )
 	fprintf( txt, "# Start time:    %s\n", start_time_str );
 	fprintf( txt, "# Real time (s): %.3f\n", real_time );
 	fprintf( txt, "# Live time (s): %.3f\n", live_time );
+	fprintf( txt, "# Dead time:     %.3f%%\n", dead_time );
 	fprintf( txt, "#\n" );
 	#if (defined _WIN32 && defined _MSC_VER)
 		fprintf( txt, "# Total counts:  %I64d\n", total_counts );
@@ -306,10 +326,18 @@ int main( int argc, char* argv[] )
 		fprintf( txt, "# Counts:       %"PRId64"\n", marker_counts );
 	#endif
 	fprintf( txt, "#\n" );
+	fprintf( txt, "# Energy calibration type:   %.8s\n", ecaltype );
 	fprintf( txt, "# Energy calibration coefficients ( E = sum(Ai * n**i) )\n" );
 	for (i=0; i<4; i++)
 		fprintf( txt, "#     A%d: %.6f\n", i, A[i] );
-	fprintf( txt, "# Energy unit: %s\n", energy_unit );
+    fprintf( txt, "# Energy unit: %s\n", energy_unit );
+	fprintf( txt, "#\n" );
+    fprintf( txt, "# FWHM calibration coefficients\n" );
+    /*
+    fprintf( txt, "# FWHM calibration coefficients ( FWHM = sum(Bi * E**(1/(i+1))) )\n" );
+    */
+    for (i=0; i<4; i++)
+		fprintf( txt, "#     B%d: %.6f\n", i, B[i] );
 	fprintf( txt, "#\n" );
 	fprintf( txt, "# Channel data\n" );
 	fprintf( txt, "# n\tenergy(%s)\tcounts\trate(1/s)\n", energy_unit );
